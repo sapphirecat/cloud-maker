@@ -12,6 +12,11 @@ the dependencies, unpack stage 2, and launch a script from within.
 Designed for convenient use as a Packer shell provisioner, or a layer in a
 Dockerfile.
 
+# Dependencies
+
+* **Host:** Python 3.x, any OS
+* **Guest:** Debian, Ubuntu, Fedora, or Amazon Linux
+
 # License
 
 MIT.
