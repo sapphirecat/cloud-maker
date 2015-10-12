@@ -4,6 +4,7 @@ import sys
 # module maps
 explanations = {
     'make_provisioner': 'Creates a self-extracting installer from a directory',
+    'fedora2ova': 'Builds an OVA from a raw *.img fedora-cloud image',
 }
 aliases = {
     'provision': 'make_provisioner',

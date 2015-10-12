@@ -13,6 +13,10 @@ and runs the configured script.
 It’s designed for convenient use as a Packer shell provisioner, or a layer in
 a Dockerfile.
 
+There’s another script, `fedora2ova`, which converts a (possibly
+xz-compressed) Fedora Cloud raw disk image into a VirtualBox OVA using the
+VBoxManage tool.
+
 # Changes from Fedora-Pack 0.7
 
 Since the command line got unwieldy, cloud-maker’s `make_provisioner` uses a
@@ -37,6 +41,10 @@ more systems and more base versions, since it knows a _lot_ less about them.
 # Dependencies
 
 The host requires **Python 3.2** and runs on any OS.
+
+* `make_provisioner` has no further dependencies.
+* `fedora2ova` requires the Fedora Cloud raw image, `xorriso`, and VirtualBox
+  management tools (`VBoxManage`).
 
 # Guest OS Support
 

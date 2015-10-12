@@ -1,0 +1,5 @@
+#cloud-config
+ssh_authorized_keys:
+$yaml_keys
+runcmd:
+  - [ sh, '-c', 'nohup /sbin/shutdown -P +1 </dev/null >/dev/null 2>&1 &' ]

@@ -1,0 +1,6 @@
+Options may also be supplied via environment, by appending the first long
+option's all-capitals name to '$var'.  For instance:
+
+  ${var}PUBKEY=aws.pub $basename
+
+Command line options, when present, override environment values.
