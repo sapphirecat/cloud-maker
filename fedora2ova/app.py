@@ -1,12 +1,13 @@
 # vim: fileencoding=utf-8
 # current status: direct port from perl
-# which was pretty much a direct port of a shell script, IIRC
+# which was a port of a shell script, I think
 import argparse
 import hashlib
 import os
 import os.path
 import pathlib
 import pkgutil
+import random
 import re
 from subprocess import call, check_call
 import string
@@ -16,7 +17,7 @@ import time
 
 VERSION = '0.5.1'; # SemVer
 
-PROG = sys.argv[0]
+PROG = 'fedora2ova'
 ENV_SCOPE = 'FEDORA2OVA_'
 VBOX_OS_TYPE = 'Fedora'
 VBOX_CMD = 'VBoxManage'
@@ -53,7 +54,8 @@ def usage (exit_code=2, message=None):
     sys.exit(exit_code)
 
 def version (exit_code=None):
-    print("{} version {}".format(os.path.basename(sys.argv[0]), VERSION), file=sys.stderr)
+    print("{} version {}".format(os.path.basename(sys.argv[0]), VERSION),
+          file=sys.stderr)
     if exit_code is not None:
         sys.exit(exit_code)
 
@@ -62,20 +64,20 @@ def get_env_default (basevar, def_val=None):
     return os.environ.get(ENV_SCOPE + basevar, def_val)
 
 def write_file (name, content, encoding='utf-8'):
-    with open(name, 'w') as f:
-        f.write(content.encode(encoding))
+    with open(name, 'w', encoding=encoding) as f:
+        f.write(content)
 
 def read_file (name, encoding='utf-8'):
-    with open(name, 'r') as f:
-        return f.read().decode(encoding)
+    with open(name, 'r', encoding=encoding) as f:
+        return f.read()
 
 def dir_create (path, mode=0o777, parents=True):
     p = pathlib.Path(path)
-    if not p.exists(path):
+    if not p.exists():
         p.mkdir(mode=mode, parents=parents)
 
 def splitlines (text):
-    line_pattern.split(text)
+    return line_pattern.split(text)
 
 
 def build_config_iso (tmpdir, host, keydata):
@@ -84,7 +86,8 @@ def build_config_iso (tmpdir, host, keydata):
 
     # Process a raw authorized_keys style file to YAML array.
     keylines = splitlines(keydata.strip())
-    yaml_keys = "\n".join("\x20\x20- '{}'".format(x.replace("'", "''")) for x in keylines)
+    yaml_keys = "\n".join("\x20\x20- '{}'".format(x.replace("'", "''"))
+                          for x in keylines)
 
     # Build user-data files (to add SSH keys) and meta-data (hostname) files
     output = get_data('resources/user-data.yaml')
@@ -92,11 +95,14 @@ def build_config_iso (tmpdir, host, keydata):
                string.Template(output).substitute(dict(yaml_keys=yaml_keys)))
 
     output = get_data('resources/meta-data.yaml')
-    write_file(os.path.joir(tmpdir, 'meta-data'),
-               string.Template(output).substitute(dict(host=host, host8=host8)))
+    tpl_vars = dict(host=host, host8=host8)
+    write_file(os.path.join(tmpdir, 'meta-data'),
+               string.Template(output).substitute(tpl_vars))
 
     # Create the ISO; xorriso needs to run within the ISO root dir!
     # [thus, cwd=tmpdir in Python]
+    # xorriso will warn about volid's format, but cloud-config might require
+    # this *specific* name (they include it without comment in examples)
     check_call(['xorriso', '-dev', iso_name,
                 '-joliet', 'on', '-rockridge', 'on', '-volid', 'cidata',
                 '-add', 'user-data', 'meta-data'],
@@ -107,7 +113,8 @@ def build_config_iso (tmpdir, host, keydata):
 def unxz_image (filename):
     base = re.sub(r"\.xz$", '', filename, 1, re.I)
     if os.path.exists(base):
-        raise ValueError("Can't unarchive {}: expected output {} exists".format(filename, base))
+        err = "Can't unarchive {}: expected output {} exists"
+        raise ValueError(err.format(filename, base))
 
     for cmd in unarchivers:
         rc = call([cmd, '-d', filename])
@@ -116,18 +123,22 @@ def unxz_image (filename):
 
         # make sure file exists after successful decompression
         if not os.path.exists(base):
-            raise RuntimeError("Unarchiver didn't produce expected name: {}".format(base))
+            err = "Unarchiver didn't produce expected name: {}"
+            raise RuntimeError(err.format(base))
 
         # return new filename
         return base
 
-    raise RuntimeError("No working unarchiver found (any of: {})".format(unarchivers))
+    err = "No working unarchiver found (any of: {})"
+    raise RuntimeError(err.format(unarchivers))
 
-def build_vm (config_iso, vm_name=None, tmpdir=None, **opts):
+def build_vm (config_iso, options):
     cloud_img = options.image
+    vm_name = options.name
+    tmpdir = options.tmpdir
     # check for "stdin" all-lowercase with optional any-case ".xz" suffix...
-    if re.match(r"^stdin(?i-msx:\.xz)?$", cloud_img):
-        raise ValueError("Disk image named 'stdin' will confuse VBox")
+    if re.match(r"^stdin(?:(?i)\.xz)?$", cloud_img):
+        raise ValueError("Disk image named 'stdin' will confuse VirtualBox")
 
     # decompress the image if it appears to be compressed
     if re.search(r"\.xz$", cloud_img, re.I):
@@ -138,42 +149,52 @@ def build_vm (config_iso, vm_name=None, tmpdir=None, **opts):
 
     # (re)convert the raw image to VDI
     vdi = cloud_img.parts[-1]
-    vdi, changes = re.subn(r"\.raw\b", "vdi")
+    vdi, changes = re.subn(r"\.raw\b", ".vdi", vdi)
     if not changes:
         vdi += '.vdi'
 
     vdi = os.path.join(tmpdir, vdi)
-    check_call([VBOX_CMD, 'convertfromraw', cloud_img, vdi, '--format', 'VDI'])
+    check_call([VBOX_CMD, 'convertfromraw', str(cloud_img), vdi,
+                '--format', 'VDI'])
 
     try:
         # 1000 = basic sanity check that we have MB not GB.
         if options.imagesize and options.imagesize > 1000:
-            check_call([VBOX_CMD, 'modifyhd', vdi, '--resize', options.imagesize])
+            check_call([VBOX_CMD, 'modifyhd', vdi,
+                        '--resize', str(options.imagesize)])
 
         # create VM description and register it with VBox
         sha1 = hashlib.new('sha1')
-        sha1.update("{}{}{}".format(os.getpid(), time.time(), random.random()).encode('utf-8'))
+        sha1.update("{}{}{}".format(os.getpid(),
+                                    time.time(),
+                                    random.random()
+                                   ).encode('utf-8'))
         vm_name += '_' + (sha1.hexdigest())[0:16]
         os_type = VBOX_OS_TYPE
-        if not '32bit' in opts:
+        if not getattr(options, '32bit'):
             os_type += '_64'
-        check_call([VBOX_CMD, 'createvm', '--register', '--name', vm_name, '--ostype', os_type])
+        check_call([VBOX_CMD, 'createvm', '--register',
+                    '--name', vm_name,
+                    '--ostype', os_type])
 
         # Settings:
         # * Enough RAM to avoid OOM issue seen at 512 MB (no swap on the image)
         # * Hardware clock in UTC (inexplicably NOT set correctly by --ostype)
         # * Disable unnecessary USB / Audio busses
         check_call([VBOX_CMD, 'modifyvm', vm_name,
-                    '--memory', '768', '--vram', '16', '--rtcuseutc', 'on',
-                    '--mouse', 'ps2', '--keyboard', 'ps2', '--usb', 'off', '--audio', 'none'])
+                    '--memory', '768', '--vram', '32', '--rtcuseutc', 'on',
+                    '--mouse', 'ps2', '--keyboard', 'ps2',
+                    '--usb', 'off', '--audio', 'none'])
         # allow access to the guest SSH
-        check_call([VBOX_CMD, 'modifyvm', vm_name, '--nic1', 'nat',
-                    '--natpf1', "ssh,tcp,127.0.0.1,{},,22".format(opts['sshport'])])
+        port_fwd = "ssh,tcp,127.0.0.1,{},,22".format(options.sshport)
+        check_call([VBOX_CMD, 'modifyvm', vm_name,
+                    '--nic1', 'nat', '--natpf1', port_fwd])
 
         # build a controller and connect our storage to it (all SATA/AHCI)
         check_call([VBOX_CMD, 'storagectl', vm_name, '--name', 'SATA',
                     '--add', 'sata', '--controller', 'IntelAhci',
-                    '--portcount', '4', '--hostiocache', 'off', '--bootable', 'on'])
+                    '--portcount', '4', '--hostiocache', 'off',
+                    '--bootable', 'on'])
         check_call([VBOX_CMD, 'storageattach', vm_name, '--storagectl', 'SATA',
                     '--port', '0', '--type', 'hdd', '--medium', vdi])
     except BaseException:
@@ -192,7 +213,8 @@ def build_vm (config_iso, vm_name=None, tmpdir=None, **opts):
     # Approximately "the amount of time vbox spends on the pre-boot screen",
     # so that even if the cloud image gets near-instant, this stays accurate.
     if bootdelta < 2.0:
-        raise RuntimeError('Improbably fast boot cycle: {.2f} sec.'.format(bootdelta))
+        err = 'Improbably fast boot cycle: {.2f} sec.'
+        raise RuntimeError(err.format(bootdelta))
 
     return vm_name
 
@@ -208,35 +230,49 @@ def cleanup_vm (vm_name):
 
 
 def build_arg_parser (prog=PROG):
+    default_pk = os.path.expanduser('~/.ssh/id_rsa.pub')
     epi = string.Template(get_data("resources/epilog.txt")).substitute({
         'basename': prog,
         'var': ENV_SCOPE,
     })
-    p = argparse.ArgumentParser(prog=prog, epilog=epi,
-                       formatter_class=argparse.RawDescriptionHelpFormatter,
-                       description="Convert a Fedora Cloud ISO to a VirtualBox OVA")
-    p.add_argument('--version', action='version', version="%(prog)s {}".format(VERSION))
-    p.add_argument('--32bit', '--32', default=get_env_default('32BIT', 0),
-                   action='store_true',
-                   help='Set the guest to 32-bit mode (for i686 cloud images.)')
+    # some contortions to fit 80 columns of width
+    new = dict(prog=prog, epilog=epi,
+               formatter_class=argparse.RawDescriptionHelpFormatter,
+               description="Convert a Fedora Cloud ISO to a VirtualBox OVA"
+              )
+    htxt = {
+        '32': 'Set the guest to 32-bit mode (for i686 cloud images.)',
+        'size': 'Resize disk image to IMAGESIZE megabytes.',
+        'name': 'Hostname (and instance-id) to set.',
+        'objdir': 'Where to create final OVA.',
+        'key': 'SSH public key to authorize for the image\'s default user.',
+        'port': 'Host port to be forwarded to the guest\'s SSH port.',
+        'tmp': 'Where to create tempfiles and config ISO.',
+        'image': 'Path to the (possibly xz-compressed) Fedora Cloud image.',
+    }
+    p = argparse.ArgumentParser(**new)
+    p.add_argument('--version', action='version',
+                   version="%(prog)s {}".format(VERSION))
+    p.add_argument('--32bit', '--32', action='store_true',
+                   help=htxt['32'], default=get_env_default('32BIT', 0))
     p.add_argument('--imagesize', '--imgsize', '--resize', '-s', type=int,
-                   default=get_env_default('IMAGESIZE'),
-                   help='Resize disk image to IMAGESIZE megabytes.')
+                   help=htxt['size'], default=get_env_default('IMAGESIZE'))
     p.add_argument('--name', '-n', default=get_env_default('NAME', 'fedora'),
-                   help='Hostname (and instance-id) to set.')
-    p.add_argument('--objdir', '--outdir', '-o', default=get_env_default('OBJDIR', '.'),
-                   help='Where to create final OVA.')
+                   help=htxt['name'])
+    p.add_argument('--objdir', '--outdir', '-o',
+                   help=htxt['objdir'],
+                   default=get_env_default('OBJDIR', '.'))
     p.add_argument('--pubkey', '--pub-key', '--public-key', '-k',
-                   default=get_env_default('PUBKEY'),
-                   help='SSH public key to authorize for the image\'s default user.')
+                   help=htxt['key'],
+                   default=get_env_default('PUBKEY', default_pk))
     p.add_argument('--sshport', '--ssh-port', '-p', type=int,
-                   default=get_env_default('SSHPORT', 18222),
-                   help='Host port to be forwarded to the guest\'s SSH port.')
+                   help=htxt['port'],
+                   default=get_env_default('SSHPORT', 18222))
     p.add_argument('--tmpdir', '--tmp-dir', '-t',
-                   default=get_env_default('TMPDIR'),
-                   help='Where to create tempfiles and config ISO.')
+                   help=htxt['tmp'],
+                   default=get_env_default('TMPDIR'))
     p.add_argument('image',
-                   help='Path to the (possibly xz-compressed) Fedora Cloud image.')
+                   help=htxt['image'])
     return p
 
 def str_path (path):
@@ -244,23 +280,31 @@ def str_path (path):
 
 def check_options (options):
     if options.pubkey is None:
-        usage(2, 'SSH public key must be provided with $'+ENV_SCOPE+'PUBKEY or --pubkey/-k flag')
+        usage(2, 'SSH public key must be provided with $' + ENV_SCOPE +
+              'PUBKEY or --pubkey/-k flag')
     elif len(options.pubkey) < 1:
         usage(2, 'SSH public key path must not be empty')
+    elif not os.path.exists(options.pubkey):
+        usage(2, 'SSH public key file not found')
     elif len(options.name) < 1:
         usage(3, 'Guest VM basename must not be empty')
 
     if not os.path.exists(options.image):
         usage(4, "Fedora Cloud image does not exist: {}".format(options.image))
 
-    keydata = read_file(options.pubkey)
+    try:
+        keydata = read_file(options.pubkey)
+    except OSError as e:
+        usage(2, 'Public key file is not accessible: {}'.format(e.message))
     if not len(keydata.strip()):
         # This is all the sanity checking I want to maintain on this.
-        usage(2, 'Public key file found, but empty: ' + options.pubkey)
+        usage(2, 'Public key file found, but empty: {}'.format(options.pubkey))
+    options.pubkey_data = keydata
 
     ova_name = options.name + '.ova'
     if os.path.exists(ova_name):
-        raise ValueError("{} exists; please move/delete it first".format(ova_name))
+        err = "{} exists; please move/delete it first"
+        raise ValueError(err.format(ova_name))
         sys.exit(5)
 
     options.objdir = str_path(options.objdir)
@@ -269,15 +313,18 @@ def check_options (options):
         options.tmpdir = str_path(options.tmpdir)
 
     if options.sshport and not (1024 <= options.sshport <= 65535):
-        raise ValueError("SSH port must be between 1024 and 65535: {}".format(options.sshport))
+        err = "SSH port must be between 1024 and 65535: {}"
+        raise ValueError(err.format(options.sshport))
 
 
 def main_build (options):
     # build pipeline
-    config_iso = build_config_iso(options.tmpdir, options.name, keydata)
+    config_iso = build_config_iso(options.tmpdir,
+                                  options.name,
+                                  options.pubkey_data)
     vm_id = build_vm(config_iso, options)
     ova_file = export_vm(options.objdir, options.name, vm_id)
-    return ova_file
+    return vm_id, ova_file
 
 def main ():
     # command line processing
@@ -286,12 +333,15 @@ def main ():
 
     dir_create(options.objdir)
     if options.tmpdir is None:
-        with tempfile.TemporaryDirectory(PROG) as d:
+        realprog = PROG
+        if realprog.startswith('-') or realprog.startswith('.'):
+            realprog = '_' + realprog
+        with tempfile.TemporaryDirectory(realprog) as d:
             options.tmpdir = d
-            ova_file = main_build(options)
+            vm_id, ova_file = main_build(options)
     else:
         dir_create(options.tmpdir)
-        ova_file = main_build(options)
+        vm_id, ova_file = main_build(options)
 
     if os.path.exists(ova_file):
         print("Completed: " + ova_file)
