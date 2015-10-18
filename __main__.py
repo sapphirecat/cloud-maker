@@ -1,5 +1,9 @@
+from __future__ import absolute_import, print_function, unicode_literals
+from pyversion import check as version_check
 import runpy
 import sys
+
+version_check()
 
 # module maps
 explanations = {
@@ -10,22 +14,25 @@ aliases = {
     'provision': 'make_provisioner',
 }
 
+wanted = None
+mod = None
 try:
     wanted = sys.argv[1]
     if wanted in explanations:
         mod = wanted
     else:
         mod = aliases[wanted]
-except KeyError:
+except (KeyError, IndexError):
     mod = None
 
 if mod is not None:
-    sys.argv[1:2] = [] # delete module name, pass all other args straight through
+    sys.argv[1:2] = [] # delete module name, pass all other args as-is
     runpy.run_module(mod)
     sys.exit(0)
 else:
     if wanted is not None and wanted != '-h' and 'help' not in wanted:
-        print("Unrecognized command: {}".format(wanted), file=sys.stderr, end="\n\n")
+        print("Unrecognized command: {}".format(wanted),
+              file=sys.stderr, end="\n\n")
     usage = [
         "cloud-maker: a zip/dir bundle of cloud tools", "",
         "Usage: {} COMMAND [command's options]".format(sys.argv[0]), "",
