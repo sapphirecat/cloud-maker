@@ -1,3 +1,4 @@
+from . import VERSION
 from .data import get_data
 from .template import Template
 
@@ -21,6 +22,7 @@ def shquote (s):
     return "\\'".join("'" + p + "'" for p in s.split("'"))
 
 class Provisioner (object):
+    PROG = 'make_provisioner'
     config = None
     options = None
     handlers = None
@@ -28,6 +30,8 @@ class Provisioner (object):
     def parse_args (self, args, prog):
         desc = "Creates a shell provisioner for guest machines"
         p = ArgumentParser(prog=prog, description=desc)
+        p.add_argument('--version', action='version',
+                       version="%(prog)s {}".format(VERSION))
         # why doesn't argparse put the default in the output?
         p.add_argument('--config', '-c', metavar='FILE', default='provisioner.ini',
                        help='Read configuration of systems from FILE (provisioner.ini)')
@@ -37,8 +41,8 @@ class Provisioner (object):
                        help='Create the provisioner for the SYSTEM listed in the configuration file')
         self.options = p.parse_args(args)
 
-    def execute (self, args=sys.argv[1:], prog=sys.argv[0]):
-        self.parse_args(args, prog)
+    def execute (self, args=sys.argv[1:]):
+        self.parse_args(args, self.PROG)
         self.read_config(self.options.system, self.options.config)
 
         conf = self.config

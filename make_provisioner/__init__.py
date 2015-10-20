@@ -1,3 +1,2 @@
-from .template import Template
-from .data import get_data
-from .app import Provisioner
+VERSION_INFO = (0,8,0)
+VERSION = '.'.join(str(x) for x in VERSION_INFO)

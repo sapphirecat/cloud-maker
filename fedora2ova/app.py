@@ -15,18 +15,14 @@ import sys
 import tempfile
 import time
 
-VERSION = '0.5.1'; # SemVer
+from . import VERSION, ENV_SCOPE
 
 PROG = 'fedora2ova'
-ENV_SCOPE = 'FEDORA2OVA_'
 VBOX_OS_TYPE = 'Fedora'
 VBOX_CMD = 'VBoxManage'
 
 unarchivers = ['xz', 'pxz', 'pixz']
 line_pattern = re.compile(r"[\r\n]+")
-
-if PROG == '-m':
-    PROG = 'fedora2ova'
 
 
 def get_data (filename, encoding='utf-8'):
