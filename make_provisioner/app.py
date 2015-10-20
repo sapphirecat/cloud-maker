@@ -84,12 +84,18 @@ class Provisioner (object):
         # Otherwise, split off for a massive hack.
         tar = tarfile.open(mode='w:gz', fileobj=fp, compresslevel=9)
         try:
-            if platform.system() != 'Windows':
-                tar.add(rootdir)
-            else:
+            if platform.system() == 'Windows':
                 self._build_tar_win(fp, rootdir, tar)
+            else:
+                self._build_tar_posix(fp, rootdir, tar)
         finally:
             tar.close()
+
+    def _posixify (self, os_path):
+        # danger: don't pass absolute OS paths through here, only dir-relative
+        # ones. POSIX won't find "c:\\/Users/alice/..."
+        host = pathlib.PurePath(os_path)
+        return pathlib.PurePosixPath("/".join(host.parts))
 
     def _build_tar_win (self, fp, rootdir, tar):
         # Python's archive builders don't set anything executable inside the
@@ -102,20 +108,18 @@ class Provisioner (object):
         # relative to the root.  We don't want to pack things as
         # "/Users/betty/provisioner/aws/stage2.sh"...
         for container, dirs, files in os.walk(rootdir):
-            tar_dir = os.path.relpath(container, rootdir)
-            if tar_dir == '.':
-                tar_dir = ''
+            tar_dir = self._posixify(os.path.relpath(container, rootdir))
             for dname in dirs:
-                abs_name = os.path.join(container, fname)
-                path = pathlib.PurePosixPath(tar_dir, fname)
-                fi = tar.gettarinfo(abs_name, str(path))
+                # abs_name: fully-qualified host OS path
+                # tar_dir: in-tar dirname (always POSIX)
+                abs_name = os.path.join(container, dname)
+                fi = tar.gettarinfo(abs_name, str(tar_dir / dname))
                 fi.mode &= 0o755
                 tar.addfile(fi)
 
             for fname in files:
                 abs_name = os.path.join(container, fname)
-                path = pathlib.PurePosixPath(tar_dir, fname)
-                fi = tar.gettarinfo(abs_name, str(path))
+                fi = tar.gettarinfo(abs_name, str(tar_dir / fname))
                 fi.mode &= 0o0755
                 with open(abs_name, 'rb') as magic:
                     zero = magic.tell()
@@ -129,6 +133,14 @@ class Provisioner (object):
                         magic.seek(zero, 0)
                     # add fully-constructed fileinfo to archive
                     tar.addfile(fi, magic)
+
+    def _build_tar_posix (self, fp, rootdir, tar):
+        # a stripped-down _build_tar_win(), see there for detail
+        for container, dirs, files in os.walk(rootdir):
+            tar_dir = self._posixify(os.path.relpath(container, rootdir))
+            for fname in files:
+                abs_name = os.path.join(container, fname)
+                tar.add(abs_name, arcname=str(tar_dir / fname))
 
     def create_provisioner (self, out_file, stage2_dir):
         with open(out_file, 'wb') as sfx:
