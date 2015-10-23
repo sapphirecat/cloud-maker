@@ -1,3 +1,3 @@
 import sys
-from make_provisioner import app
-sys.exit(app.Provisioner().execute())
+import make_provisioner as mp
+sys.exit(mp.main())

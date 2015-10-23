@@ -344,3 +344,4 @@ def main ():
         cleanup_vm(vm_id)
     else:
         print("Seemed OK, but failed to create: " + ova_file, file=sys.stderr)
+    return 0
