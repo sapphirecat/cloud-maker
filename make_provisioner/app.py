@@ -1,12 +1,21 @@
+from __future__ import print_function, absolute_import, unicode_literals
+
 from . import VERSION
 from .data import get_data
 from .template import Template
 
 from argparse import ArgumentParser
-import configparser
+from codecs import open
+try:
+    import configparser
+    _CONFIG_PARSER = configparser.ConfigParser
+except ImportError:
+    import ConfigParser as configparser
+    _CONFIG_PARSER = configparser.SafeConfigParser
 import os
-import pathlib
+import os.path
 import platform
+import posixpath
 import shutil
 import sys
 import tarfile
@@ -56,19 +65,25 @@ class Provisioner (object):
         return 0
 
     def read_config (self, system, path, encoding='utf-8'):
-        ini = configparser.ConfigParser()
+        default = configparser.DEFAULTSECT
+        ini = _CONFIG_PARSER() # ConfigParser [py3] or SafeConfigParser [py2]
         ini.optionxform = lambda o: o
-        with open(path, 'rt', encoding=encoding) as fp:
-            ini.read_file(fp, path)
+        with open(path, 'r', encoding=encoding) as fp:
+            try:
+                ini.read_file(fp, path)
+            except AttributeError:
+                ini.readfp(fp, path)
 
         # set defaults from the environment
-        d = ini[configparser.DEFAULTSECT]
-        if "HOME" not in d:
-            d["HOME"] = os.path.expanduser("~")
-        if "USER" not in d:
-            d["USER"] = _first_key(os.environ, ("USER", "USERNAME", "LOGNAME"), '')
+        if not ini.has_option(default, 'HOME'):
+            ini.set(default, 'HOME', os.path.expanduser("~"))
+        if not ini.has_option(default, 'USER'):
+            ini.set(default, 'USER', _first_key(os.environ, ("USER", "USERNAME", "LOGNAME"), ''))
 
-        self.config = ini[system]
+        # make a dictionary interface to the config because I like it.
+        # the difference: this version resolves HOME/USER now, not later.
+        # so if you're extending this, beware of that, I guess :-/
+        self.config = dict(ini.items(system))
 
     def get_sfx_stub (self):
         txt = get_data('scripts/guest.sh').decode('utf-8')
@@ -98,8 +113,16 @@ class Provisioner (object):
     def _posixify (self, os_path):
         # danger: don't pass absolute OS paths through here, only dir-relative
         # ones. POSIX won't find "c:\\/Users/alice/..."
-        host = pathlib.PurePath(os_path)
-        return pathlib.PurePosixPath("/".join(host.parts))
+        rseg = []
+        while True:
+            bit = os.path.split(os_path)
+            rseg.append(bit[1])
+            if not bit[0]:
+                break
+            os_path = bit[0]
+
+        rseg.reverse()
+        return posixpath.join(*rseg)
 
     def _build_tar_win (self, fp, rootdir, tar):
         # Python's archive builders don't set anything executable inside the
@@ -117,13 +140,13 @@ class Provisioner (object):
                 # abs_name: fully-qualified host OS path
                 # tar_dir: in-tar dirname (always POSIX)
                 abs_name = os.path.join(container, dname)
-                fi = tar.gettarinfo(abs_name, str(tar_dir / dname))
+                fi = tar.gettarinfo(abs_name, posixpath.join(tar_dir, dname))
                 fi.mode &= 0o755
                 tar.addfile(fi)
 
             for fname in files:
                 abs_name = os.path.join(container, fname)
-                fi = tar.gettarinfo(abs_name, str(tar_dir / fname))
+                fi = tar.gettarinfo(abs_name, posixpath.join(tar_dir, fname))
                 fi.mode &= 0o0755
                 with open(abs_name, 'rb') as magic:
                     zero = magic.tell()
@@ -144,7 +167,7 @@ class Provisioner (object):
             tar_dir = self._posixify(os.path.relpath(container, rootdir))
             for fname in files:
                 abs_name = os.path.join(container, fname)
-                tar.add(abs_name, arcname=str(tar_dir / fname))
+                tar.add(abs_name, arcname=posixpath.join(tar_dir, fname))
 
     def create_provisioner (self, out_file, stage2_dir):
         with open(out_file, 'wb') as sfx:

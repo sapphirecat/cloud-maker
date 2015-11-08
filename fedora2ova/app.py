@@ -1,11 +1,13 @@
 # vim: fileencoding=utf-8
+from __future__ import print_function, absolute_import, unicode_literals
+
 # current status: direct port from perl
 # which was a port of a shell script, I think
 import argparse
+from codecs import open
 import hashlib
 import os
 import os.path
-import pathlib
 import pkgutil
 import random
 import re
@@ -23,6 +25,13 @@ VBOX_CMD = 'VBoxManage'
 
 unarchivers = ['xz', 'pxz', 'pixz']
 line_pattern = re.compile(r"[\r\n]+")
+
+try:
+    TemporaryDirectory = tempfile.TemporaryDirectory
+except AttributeError:
+    from . import tempdir
+    TemporaryDirectory = tempdir.TemporaryDirectory
+
 
 
 def get_data (filename, encoding='utf-8'):
@@ -68,9 +77,11 @@ def read_file (name, encoding='utf-8'):
         return f.read()
 
 def dir_create (path, mode=0o777, parents=True):
-    p = pathlib.Path(path)
-    if not p.exists():
-        p.mkdir(mode=mode, parents=parents)
+    if not os.path.exists(path):
+        if parents:
+            os.makedirs(path, mode)
+        else:
+            os.mkdir(path, mode)
 
 def splitlines (text):
     return line_pattern.split(text)
@@ -141,10 +152,10 @@ def build_vm (config_iso, options):
         print("Decompressing cloud image...")
         cloud_img = unxz_image(cloud_img)
 
-    cloud_img = pathlib.Path(cloud_img).resolve()
+    cloud_img = os.path.abspath(cloud_img)
 
     # (re)convert the raw image to VDI
-    vdi = cloud_img.parts[-1]
+    vdi = os.path.basename(cloud_img)
     vdi, changes = re.subn(r"\.raw\b", ".vdi", vdi)
     if not changes:
         vdi += '.vdi'
@@ -272,7 +283,7 @@ def build_arg_parser (prog=PROG):
     return p
 
 def str_path (path):
-    return str(pathlib.Path(path).resolve())
+    return os.path.abspath(path)
 
 def check_options (options):
     if options.pubkey is None:
@@ -322,6 +333,15 @@ def main_build (options):
     ova_file = export_vm(options.objdir, options.name, vm_id)
     return vm_id, ova_file
 
+def post_build (vm_id, ova_file):
+    # post-build checks; refactored because VBox unregistervm fails when the
+    # temporary directory housing the config ISO has been deleted.
+    if os.path.exists(ova_file):
+        print("Completed: " + ova_file)
+        cleanup_vm(vm_id)
+    else:
+        print("Seemed OK, but failed to create: " + ova_file, file=sys.stderr)
+
 def main ():
     # command line processing
     options = build_arg_parser().parse_args()
@@ -332,16 +352,13 @@ def main ():
         realprog = PROG
         if realprog.startswith('-') or realprog.startswith('.'):
             realprog = '_' + realprog
-        with tempfile.TemporaryDirectory(realprog) as d:
+        with TemporaryDirectory(realprog) as d:
             options.tmpdir = d
             vm_id, ova_file = main_build(options)
+            post_build(vm_id, ova_file)
     else:
         dir_create(options.tmpdir)
         vm_id, ova_file = main_build(options)
+        post_build(vm_id, ova_file)
 
-    if os.path.exists(ova_file):
-        print("Completed: " + ova_file)
-        cleanup_vm(vm_id)
-    else:
-        print("Seemed OK, but failed to create: " + ova_file, file=sys.stderr)
     return 0
