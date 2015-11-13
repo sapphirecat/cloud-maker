@@ -16,6 +16,7 @@ import string
 import sys
 import tempfile
 import time
+import traceback
 
 from . import VERSION, ENV_SCOPE
 
@@ -342,9 +343,7 @@ def post_build (vm_id, ova_file):
     else:
         print("Seemed OK, but failed to create: " + ova_file, file=sys.stderr)
 
-def main ():
-    # command line processing
-    options = build_arg_parser().parse_args()
+def main_with_options (options):
     check_options(options)
 
     dir_create(options.objdir)
@@ -361,4 +360,10 @@ def main ():
         vm_id, ova_file = main_build(options)
         post_build(vm_id, ova_file)
 
-    return 0
+def main ():
+    try:
+        main_with_options(build_arg_parser().parse_args())
+        return 0
+    except:
+        traceback.print_exc()
+        return 2

@@ -1,3 +1,4 @@
 # vim: fileencoding=utf-8
-from . import main
-main()
+import sys
+from .app import main
+sys.exit(main())

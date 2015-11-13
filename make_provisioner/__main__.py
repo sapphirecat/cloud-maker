@@ -1,4 +1,4 @@
 # vim: fileencoding=utf-8
 import sys
-import make_provisioner as mp
-sys.exit(mp.main())
+from .app import main
+sys.exit(main())

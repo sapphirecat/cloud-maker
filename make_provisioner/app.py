@@ -21,6 +21,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import traceback
 
 def _first_key (d, keys, default=None):
     for k in keys:
@@ -182,3 +183,10 @@ class Provisioner (object):
                 self.build_tar(tgz, stage2_dir)
                 tgz.seek(zero, 0)
                 shutil.copyfileobj(tgz, sfx)
+
+def main ():
+    try:
+        return Provisioner().execute()
+    except:
+        traceback.print_exc()
+        return 2
