@@ -81,6 +81,8 @@ class Provisioner (object):
             ini.set(default, 'HOME', os.path.expanduser("~"))
         if not ini.has_option(default, 'USER'):
             ini.set(default, 'USER', _first_key(os.environ, ("USER", "USERNAME", "LOGNAME"), ''))
+        if not ini.has_option(default, 'INI_DIR'):
+            ini.set(default, 'INI_DIR', os.path.abspath(os.path.dirname(path)))
 
         # make a dictionary interface to the config because I like it.
         # the difference: this version resolves HOME/USER now, not later.
