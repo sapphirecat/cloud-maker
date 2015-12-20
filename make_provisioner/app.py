@@ -5,6 +5,7 @@ from . import VERSION
 from .data import get_data
 from .template import Template
 
+raw_open = open
 from argparse import ArgumentParser
 from codecs import open
 try:
@@ -152,7 +153,7 @@ class Provisioner (object):
                 abs_name = os.path.join(container, fname)
                 fi = tar.gettarinfo(abs_name, posixpath.join(tar_dir, fname))
                 fi.mode &= 0o0755
-                with open(abs_name, 'rb') as magic:
+                with raw_open(abs_name, 'rb') as magic:
                     zero = magic.tell()
                     try:
                         m4 = magic.read(4)
@@ -174,7 +175,7 @@ class Provisioner (object):
                 tar.add(abs_name, arcname=posixpath.join(tar_dir, fname))
 
     def create_provisioner (self, out_file, stage2_dir):
-        with open(out_file, 'wb') as sfx:
+        with raw_open(out_file, 'wb') as sfx:
             # write the SFX stub to the provisioner
             sfx.write(self.get_sfx_stub().encode('utf-8'))
 
