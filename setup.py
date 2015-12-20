@@ -20,9 +20,6 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='cloud-maker',
-
-    # TODO: single-source this throughout the project.  see:
-    # https://packaging.python.org/en/latest/single_source_version.html
     version=VERSION,
 
     description='Tools for building cloud images (make_provisioner and fedora2ova)',
