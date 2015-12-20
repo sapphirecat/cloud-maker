@@ -21,7 +21,7 @@ VBoxManage tool.
 Changes from Fedora-Pack 0.7
 ----------------------------
 
-As noted in the description, this version uses **Python 2.7 or Python 3.2+**
+As noted in the description, this version uses **Python 2.7 or Python 3.3.4+**
 instead of Perl to do all the work.
 
 Distros and Versions are gone
@@ -58,7 +58,7 @@ You can specify your own config file instead of using the default:
 Dependencies
 ------------
 
-The host requires **Python 2.7 or Python 3.2** and runs on any OS.
+The host requires **Python 2.7 or Python 3.3.4** and runs on any OS.
 
 Note that Python 2 support has been added to the original project, so that OS
 X and some Linux users won't have to install Python 3 to get things running.
