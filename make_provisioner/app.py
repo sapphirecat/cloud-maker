@@ -154,7 +154,7 @@ class Provisioner (object):
             for fname in files:
                 abs_name = os.path.join(container, fname)
                 fi = tar.gettarinfo(abs_name, posixpath.join(tar_dir, fname))
-                fi.mode &= 0o0755
+                fi.mode &= 0o755
                 with raw_open(abs_name, 'rb') as magic:
                     zero = magic.tell()
                     try:
