@@ -141,6 +141,8 @@ class Provisioner (object):
         # "/Users/betty/provisioner/aws/stage2.sh"...
         for container, dirs, files in os.walk(rootdir):
             tar_dir = self._posixify(os.path.relpath(container, rootdir))
+            if tar_dir == '.':
+                tar_dir = ''
             for dname in dirs:
                 # abs_name: fully-qualified host OS path
                 # tar_dir: in-tar dirname (always POSIX)
