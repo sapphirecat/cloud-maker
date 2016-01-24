@@ -6,15 +6,15 @@ class VersionError (ValueError):
     pass
 
 def check_ex ():
-    major, minor, patch = sys.version_info[0:2]
-    if major == 3:
-        if minor < 3 or (minor == 3 and patch < 4):
-            raise VersionError("Error: this is Python 3.{}.{}, not 3.3.4+".format(minor, patch))
-    elif major == 2:
-        if minor < 7:
-            raise VersionError("Error: this is Python 2.{}, not 2.7".format(minor))
+    v = sys.version_info
+    if v.major == 3:
+        if v.minor < 3 or (v.minor == 3 and v.micro < 4):
+            raise VersionError("Error: this is Python 3.{}.{}, not 3.3.4+".format(v.minor, v.micro))
+    elif v.major == 2:
+        if v.minor < 7:
+            raise VersionError("Error: this is Python 2.{}, not 2.7".format(v.minor))
     else:
-        raise VersionError("Error: this is Python {}, not 2.7 nor 3.x".format(major))
+        raise VersionError("Error: this is Python {}, not 2.7 nor 3.x".format(v.major))
 
 def check ():
     try:
