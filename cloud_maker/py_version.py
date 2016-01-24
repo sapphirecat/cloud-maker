@@ -21,5 +21,5 @@ def check ():
         check_ex()
     except VersionError as e:
         print(e.args[0], file=sys.stderr)
-        print("Python 2.7 or 3.3+ is required.", file=sys.stderr)
+        print("Python 2.7.x or 3.3.4+ is required.", file=sys.stderr)
         sys.exit(2)
