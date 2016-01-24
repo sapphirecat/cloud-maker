@@ -364,6 +364,10 @@ def main ():
     try:
         main_with_options(build_arg_parser().parse_args())
         return 0
+    except KeyboardInterrupt:
+        return 1
+    except SystemExit as e:
+        return e.code
     except:
         traceback.print_exc()
         return 2

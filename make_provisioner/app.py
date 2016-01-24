@@ -192,6 +192,10 @@ class Provisioner (object):
 def main ():
     try:
         return Provisioner().execute()
+    except KeyboardInterrupt:
+        return 1
+    except SystemExit as e:
+        return e.code
     except:
         traceback.print_exc()
         return 2
